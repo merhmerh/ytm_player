@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dislike-song"
+description = "Enables the dislike_song command without any pre-configured scope."
+commands.allow = ["dislike_song"]
+
+[[permission]]
+identifier = "deny-dislike-song"
+description = "Denies the dislike_song command without any pre-configured scope."
+commands.deny = ["dislike_song"]

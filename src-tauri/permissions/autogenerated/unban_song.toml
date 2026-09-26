@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-unban-song"
+description = "Enables the unban_song command without any pre-configured scope."
+commands.allow = ["unban_song"]
+
+[[permission]]
+identifier = "deny-unban-song"
+description = "Denies the unban_song command without any pre-configured scope."
+commands.deny = ["unban_song"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-bans"
+description = "Enables the get_bans command without any pre-configured scope."
+commands.allow = ["get_bans"]
+
+[[permission]]
+identifier = "deny-get-bans"
+description = "Denies the get_bans command without any pre-configured scope."
+commands.deny = ["get_bans"]

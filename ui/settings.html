@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>YTM Player Settings</title>
+<style>
+  :root { color-scheme: light dark; --bg: #fff; --fg: #111; --muted: #666; --line: #ddd; --field: #f4f4f5; --accent: #ff0033; --err: #c62828; --ok: #2e7d32; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #18181b; --fg: #eee; --muted: #9a9aa2; --line: #333; --field: #26262b; --err: #ef5350; --ok: #66bb6a; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px 22px; background: var(--bg); color: var(--fg); font: 14px/1.4 "Segoe UI", system-ui, sans-serif; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  section { margin-bottom: 22px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  .row label { flex: 1; }
+  .key { width: 220px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--field); color: var(--fg); font: inherit; text-align: center; cursor: pointer; }
+  .key.recording { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+  input[type=number] { width: 110px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--field); color: var(--fg); font: inherit; }
+  .hint { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
+  .actions { display: flex; align-items: center; gap: 12px; }
+  button.primary { background: var(--accent); color: #fff; border: 0; padding: 8px 18px; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer; }
+  button.link { background: none; border: 0; color: var(--muted); cursor: pointer; font: inherit; text-decoration: underline; }
+  #status { font-size: 13px; }
+  #status.err { color: var(--err); } #status.ok { color: var(--ok); }
+</style>
+</head>
+<body>
+  <section>
+    <h2>Global shortcuts</h2>
+    <div class="row"><label>Play / Pause</label><button class="key" data-field="toggle"></button></div>
+    <div class="row"><label>Next song</label><button class="key" data-field="next"></button></div>
+    <div class="row"><label>Previous song</label><button class="key" data-field="prev"></button></div>
+    <div class="row"><label>Show/hide stats panel<br /><span class="hint">only while the app is focused</span></label><button class="key" data-field="panel"></button></div>
+    <p class="hint">Click a box, then press the new combination (include Ctrl, Alt, Shift or Win). Esc cancels, Backspace clears.</p>
+  </section>
+
+  <section>
+    <h2>Memory watchdog</h2>
+    <div class="row"><label><input type="checkbox" id="watchdog" /> Reload the page when memory gets high</label></div>
+    <div class="row"><label>Limit (MB)</label><input type="number" id="limit" min="300" step="100" /></div>
+    <p class="hint">Current usage: <span id="mem">…</span> MB. When paused, it reloads right away; when playing, it waits for the next track. The song is restored either way.</p>
+  </section>
+
+  <div class="actions">
+    <button class="primary" id="save">Save</button>
+    <button class="link" id="defaults">Restore defaults</button>
+    <span id="status"></span>
+  </div>
+
+<script>
+  const invoke = (cmd, args) => window.__TAURI_INTERNALS__.invoke(cmd, args);
+  const DEFAULTS = { toggle: 'Ctrl+Shift+Space', next: 'Ctrl+Shift+PageUp', prev: 'Ctrl+Shift+PageDown', panel: 'Ctrl+D' };
+  let settings = {};
+  let recording = null;
+
+  const $ = (id) => document.getElementById(id);
+  const keyButtons = [...document.querySelectorAll('.key')];
+  const status = (msg, cls = '') => { $('status').textContent = msg; $('status').className = cls; };
+
+  function render() {
+    for (const b of keyButtons) b.textContent = settings[b.dataset.field] || '(none)';
+    $('watchdog').checked = settings.watchdog;
+    $('limit').value = settings.memory_limit_mb;
+  }
+
+  function stopRecording() {
+    if (!recording) return;
+    recording.classList.remove('recording');
+    recording = null;
+    render();
+    invoke('suspend_shortcuts', { suspend: false });
+  }
+
+  // Convert a KeyboardEvent into a Tauri accelerator like "Ctrl+Shift+PageUp".
+  function accelerator(e) {
+    if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return null;
+    const mods = [];
+    if (e.ctrlKey) mods.push('Ctrl');
+    if (e.altKey) mods.push('Alt');
+    if (e.shiftKey) mods.push('Shift');
+    if (e.metaKey) mods.push('Super');
+    if (!mods.length) return null;
+    let key = e.code;
+    if (/^Key[A-Z]$/.test(key)) key = key.slice(3);
+    else if (/^Digit\d$/.test(key)) key = key.slice(5);
+    return [...mods, key].join('+');
+  }
+
+  keyButtons.forEach((b) => b.addEventListener('click', () => {
+    if (recording === b) return stopRecording();
+    stopRecording();
+    recording = b;
+    b.classList.add('recording');
+    b.textContent = 'Press keys…';
+    invoke('suspend_shortcuts', { suspend: true });
+  }));
+
+  window.addEventListener('keydown', (e) => {
+    if (!recording) return;
+    e.preventDefault();
+    if (e.key === 'Escape') return stopRecording();
+    if (e.key === 'Backspace' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      settings[recording.dataset.field] = '';
+      return stopRecording();
+    }
+    const accel = accelerator(e);
+    if (!accel) { recording.textContent = 'Press keys… (needs a modifier)'; return; }
+    settings[recording.dataset.field] = accel;
+    stopRecording();
+    status('Unsaved changes');
+  });
+
+  window.addEventListener('blur', stopRecording);
+
+  $('defaults').addEventListener('click', () => { Object.assign(settings, DEFAULTS); render(); status('Unsaved changes'); });
+
+  $('save').addEventListener('click', async () => {
+    stopRecording();
+    settings.watchdog = $('watchdog').checked;
+    settings.memory_limit_mb = Math.max(300, parseInt($('limit').value, 10) || 1500);
+    try {
+      await invoke('save_settings', { settings });
+      status('Saved', 'ok');
+    } catch (err) {
+      status(String(err), 'err');
+    }
+  });
+
+  async function refreshMemory() { $('mem').textContent = await invoke('get_memory_mb'); }
+
+  (async () => {
+    settings = await invoke('get_settings');
+    render();
+    refreshMemory();
+    setInterval(refreshMemory, 5000);
+  })();
+</script>
+</body>
+</html>

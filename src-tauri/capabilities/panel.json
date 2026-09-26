@@ -1,0 +1,23 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "panel",
+  "description": "Local stats panel beside YouTube Music",
+  "webviews": [
+    "panel"
+  ],
+  "permissions": [
+    "allow-get-stats",
+    "allow-get-panel-ui",
+    "allow-toggle-panel",
+    "allow-get-bans",
+    "allow-ban-current-song",
+    "allow-ban-artist",
+    "allow-unban-song",
+    "allow-unban-artist",
+    "allow-get-likes",
+    "allow-sync-likes",
+    "allow-play-song",
+    "allow-get-eq",
+    "allow-set-eq"
+  ]
+}

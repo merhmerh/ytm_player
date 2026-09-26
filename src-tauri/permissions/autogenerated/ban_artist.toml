@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ban-artist"
+description = "Enables the ban_artist command without any pre-configured scope."
+commands.allow = ["ban_artist"]
+
+[[permission]]
+identifier = "deny-ban-artist"
+description = "Denies the ban_artist command without any pre-configured scope."
+commands.deny = ["ban_artist"]

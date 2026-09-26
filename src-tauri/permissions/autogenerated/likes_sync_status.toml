@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-likes-sync-status"
+description = "Enables the likes_sync_status command without any pre-configured scope."
+commands.allow = ["likes_sync_status"]
+
+[[permission]]
+identifier = "deny-likes-sync-status"
+description = "Denies the likes_sync_status command without any pre-configured scope."
+commands.deny = ["likes_sync_status"]

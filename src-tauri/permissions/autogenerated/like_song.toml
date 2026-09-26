@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-like-song"
+description = "Enables the like_song command without any pre-configured scope."
+commands.allow = ["like_song"]
+
+[[permission]]
+identifier = "deny-like-song"
+description = "Denies the like_song command without any pre-configured scope."
+commands.deny = ["like_song"]

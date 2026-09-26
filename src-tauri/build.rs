@@ -1,0 +1,31 @@
+fn main() {
+    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
+        tauri_build::AppManifest::new().commands(&[
+            "report_state",
+            "get_restore",
+            "get_settings",
+            "save_settings",
+            "suspend_shortcuts",
+            "get_memory_mb",
+            "get_panel_ui",
+            "toggle_panel",
+            "get_stats",
+            "get_bans",
+            "ban_current_song",
+            "ban_artist",
+            "unban_song",
+            "unban_artist",
+            "get_eq",
+            "set_eq",
+            "get_likes",
+            "sync_likes",
+            "likes_sync_status",
+            "save_likes",
+            "like_song",
+            "unlike_song",
+            "dislike_song",
+            "play_song",
+        ]),
+    ))
+    .expect("failed to run tauri-build");
+}

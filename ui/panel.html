@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Stats</title>
+<style>
+  :root {
+    --bg: #0b0b0b; --card: #161616; --line: #262626; --fg: #f1f1f1; --muted: #9a9a9a; --faint: #6b6b6b;
+    --accent: #ff0033;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg); overflow: hidden;
+    font: 13px/1.4 "Segoe UI", Roboto, system-ui, sans-serif; user-select: none;
+    border-left: 1px solid var(--line);
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+  #full { display: flex; flex-direction: column; height: 100%; }
+  header { height: 60px; display: flex; align-items: center; padding: 0 16px; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  /* Same window spot as the reopen button drawn over YouTube Music (inject.js). */
+  #collapse {
+    position: fixed; top: 14px; right: 12px; width: 32px; height: 32px; padding: 0;
+    display: flex; align-items: center; justify-content: center; border-radius: 50%; color: #aaa;
+  }
+  #collapse:hover { background: rgba(255, 255, 255, .1); color: #fff; }
+
+  .ram { margin: 0 14px 16px; background: var(--card); border-radius: 10px; padding: 10px 12px 8px; }
+  .ram .row { display: flex; justify-content: space-between; align-items: baseline; }
+  .ram .value { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ram canvas { display: block; width: 100%; height: 56px; margin: 6px 0 4px; }
+  .ram .foot { display: flex; justify-content: space-between; color: var(--faint); font-size: 11px; }
+
+  .now { display: flex; gap: 12px; align-items: center; margin: 0 14px 14px; padding: 12px; background: var(--card); border-radius: 10px; }
+  .now img { width: 56px; height: 56px; border-radius: 6px; object-fit: cover; background: #222; flex: none; }
+  .now .meta { min-width: 0; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .now .title { font-weight: 600; font-size: 14px; }
+  .now .artist, .now .count { color: var(--muted); }
+  .now .count b { color: var(--fg); font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 14px 12px; }
+  .grid:not(.expanded) .more { display: none; }
+  .more-btn { display: flex; align-items: center; gap: 2px; margin: -8px 14px 2px auto; padding: 3px 4px 3px 8px; border-radius: 6px; color: var(--faint); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+  .more-btn:hover { color: var(--fg); }
+  .more-btn svg { transition: transform .15s; }
+  .more-btn.expanded svg { transform: rotate(180deg); }
+
+  .eq { margin: 0 14px 16px; background: var(--card); border-radius: 10px; padding: 8px 6px 8px 12px; }
+  .eq-head { display: flex; align-items: center; gap: 8px; min-height: 26px; }
+  .eq-head .label { flex: 1; }
+  .eq:not(.expanded) .eq-head { cursor: pointer; }
+  .eq:not(.expanded) :is(#eq-preset, #eq-on, .eq-bands),
+  .eq.expanded :is(.eq-mini, .eq-summary) { display: none; }
+  /* Compact, read-only curve: one bar per band, up or down from the middle. */
+  .eq-mini { display: flex; align-items: center; gap: 2px; height: 20px; }
+  .eq-mini i { width: 4px; height: 20px; position: relative; }
+  .eq-mini i::after { content: ""; position: absolute; left: 0; right: 0; border-radius: 1px; background: #ff4d6d; top: var(--top); bottom: var(--bottom); min-height: 1px; }
+  .eq.off .eq-mini i::after { background: #444; }
+  .eq-summary { font-size: 12px; color: var(--muted); max-width: 90px; }
+  .eq.off .eq-summary { color: var(--faint); }
+  .eq-chevron { flex: none; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--faint); }
+  .eq-chevron:hover { background: rgba(255, 255, 255, .08); color: var(--fg); }
+  .eq-chevron svg { transition: transform .15s; }
+  .eq.expanded .eq-chevron svg { transform: rotate(180deg); }
+  .eq select { padding: 3px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; font-size: 12px; outline: none; cursor: pointer; }
+  .eq select:focus { border-color: #444; }
+  .switch { flex: none; position: relative; width: 30px; height: 17px; border-radius: 9px; background: #3a3a3a; transition: background .15s; }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #ddd; transition: transform .15s; }
+  .switch[aria-checked="true"] { background: var(--accent); }
+  .switch[aria-checked="true"]::after { transform: translateX(13px); background: #fff; }
+  .eq-bands { position: relative; display: grid; grid-template-columns: repeat(10, 1fr); margin-top: 8px; transition: opacity .15s; }
+  .eq.off .eq-bands { opacity: .45; }
+  /* 0 dB guide line through the middle of the sliders */
+  .eq-bands::before { content: ""; position: absolute; left: 4px; right: 4px; top: 45px; border-top: 1px dashed #2e2e2e; }
+  .band { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+  .band .slot { position: relative; width: 100%; height: 90px; }
+  .band span { font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .band.active span { color: var(--fg); }
+  /* A horizontal range turned upright: keeps native dragging and arrow keys. */
+  .band input {
+    position: absolute; left: 50%; top: 50%; width: 90px; height: 18px; margin: 0;
+    transform: translate(-50%, -50%) rotate(-90deg); -webkit-appearance: none; appearance: none;
+    background: transparent; cursor: pointer; outline: none;
+  }
+  .band input::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(to right, #333 var(--lo), #ff4d6d var(--lo), #ff4d6d var(--hi), #333 var(--hi));
+  }
+  .band input::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4px; border-radius: 50%;
+    background: #f1f1f1; box-shadow: 0 0 0 3px var(--card);
+  }
+  .band input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--accent); }
+  .tile { background: var(--card); border-radius: 10px; padding: 10px 12px; }
+  .tile .value { font-size: 18px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+  .badge { display: none; margin-left: 6px; padding: 1px 6px; border-radius: 4px; background: var(--accent); color: #fff; font-size: 10px; letter-spacing: .04em; vertical-align: 1px; }
+  .badge.on { display: inline-block; }
+
+  .tabs { display: flex; gap: 4px; margin: 0 14px 6px; border-bottom: 1px solid var(--line); }
+  .tabs button { padding: 6px 10px; color: var(--faint); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tabs button:hover { color: var(--fg); }
+  .tabs button.active { color: var(--fg); border-bottom-color: var(--fg); }
+  .pane { flex: 1; overflow-y: auto; padding: 4px 6px 10px; }
+  .pane[hidden] { display: none; }
+  .pane::-webkit-scrollbar { width: 8px; }
+  .pane::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+
+  .ban-actions { display: flex; gap: 8px; padding: 6px 8px 4px; }
+  .ban-actions button, .chips button { flex: 1; padding: 7px 10px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); font-size: 12px; font-weight: 600; }
+  .ban-actions button:hover:not(:disabled), .chips button:hover { border-color: var(--accent); color: #fff; }
+  .ban-actions button:disabled { opacity: .4; cursor: default; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 8px 2px; }
+  .chips[hidden] { display: none; }
+  .chips .hint { width: 100%; color: var(--faint); font-size: 11px; }
+  .chips button { flex: none; }
+  .section { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); padding: 12px 10px 4px; }
+  .unban { flex: none; width: 26px; height: 26px; border-radius: 50%; color: var(--faint); display: flex; align-items: center; justify-content: center; }
+  .unban:hover { background: #2a2a2a; color: #fff; }
+  .artist-icon { width: 38px; height: 38px; border-radius: 50%; background: #222; flex: none; display: flex; align-items: center; justify-content: center; color: var(--muted); font-weight: 600; }
+  .item { display: flex; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 8px; }
+  .item:hover { background: var(--card); }
+  .item img { width: 38px; height: 38px; border-radius: 4px; object-fit: cover; background: #222; flex: none; }
+  .item .meta { flex: 1; min-width: 0; }
+  .item .artist { color: var(--muted); font-size: 12px; }
+  .item time { color: var(--faint); font-size: 11px; flex: none; font-variant-numeric: tabular-nums; }
+  .empty { color: var(--faint); padding: 8px 10px; }
+
+  .likes-bar { display: flex; gap: 6px; padding: 6px 8px 2px; position: sticky; top: -4px; background: var(--bg); z-index: 1; }
+  .likes-bar input { flex: 1; min-width: 0; padding: 7px 12px; border-radius: 16px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font: inherit; font-size: 12px; outline: none; user-select: text; }
+  .likes-bar input:focus { border-color: #444; }
+  .icon-btn { flex: none; width: 32px; height: 32px; border-radius: 50%; color: var(--muted); display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); background: var(--card); }
+  .icon-btn:hover:not(:disabled) { color: #fff; border-color: #444; }
+  .icon-btn:disabled { cursor: default; }
+  .icon-btn.spin svg { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .likes-info { color: var(--faint); font-size: 11px; padding: 6px 10px 2px; }
+  .likes-info.error { color: #ff6b81; }
+  #like-list .item { cursor: pointer; }
+  #like-list .item.playing .ellipsis:first-child { color: #ff4d6d; }
+</style>
+</head>
+<body>
+  <div id="full">
+    <header>
+      <h1>Stats</h1>
+      <button id="collapse" title="Hide stats">
+        <!-- lucide:chevron-right -->
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+    </header>
+
+    <div class="now">
+      <img id="now-thumb" alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" />
+      <div class="meta">
+        <div class="label">Now playing<span id="now-banned" class="badge">Banned</span></div>
+        <div id="now-title" class="title ellipsis">Nothing yet</div>
+        <div id="now-artist" class="artist ellipsis"></div>
+        <div id="now-count" class="count"></div>
+      </div>
+    </div>
+
+    <button id="stats-more" class="more-btn" aria-expanded="false"><span>Show more</span>
+      <!-- lucide:chevron-down -->
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <div class="grid" id="stats">
+      <div class="tile"><div class="label">Songs today</div><div class="value" id="today-plays">–</div></div>
+      <div class="tile"><div class="label">Listened today</div><div class="value" id="today-time">–</div></div>
+      <div class="tile more"><div class="label">Total songs</div><div class="value" id="total-plays">–</div></div>
+      <div class="tile more"><div class="label">Total listened</div><div class="value" id="total-time">–</div></div>
+    </div>
+
+    <!-- Collapsed: a read-only summary (curve + preset). Expanded: preset menu, switch and sliders. -->
+    <div class="eq off" id="eq">
+      <div class="eq-head">
+        <span class="label">Equalizer</span>
+        <div class="eq-mini" id="eq-mini" aria-hidden="true"></div>
+        <span class="eq-summary" id="eq-summary"></span>
+        <select id="eq-preset" title="Preset"></select>
+        <button id="eq-on" class="switch" role="switch" aria-checked="false" title="Turn the equalizer on or off"></button>
+        <button id="eq-expand" class="eq-chevron" aria-expanded="false" title="Show equalizer">
+          <!-- lucide:chevron-down -->
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+      </div>
+      <div class="eq-bands" id="eq-bands"></div>
+    </div>
+
+    <div class="ram">
+      <div class="row"><span class="label">RAM</span><span class="value" id="ram">–</span></div>
+      <canvas id="ram-graph"></canvas>
+      <div class="foot"><span>last 5 min</span><span>App running <span id="uptime">–</span></span></div>
+    </div>
+
+    <nav class="tabs">
+      <button data-tab="recent">Recent</button>
+      <button data-tab="liked">Liked</button>
+      <button data-tab="banned">Banned</button>
+    </nav>
+    <div class="pane" id="pane-recent">
+      <div id="history"><div class="empty">Songs you listen to will show up here.</div></div>
+    </div>
+    <div class="pane" id="pane-liked" hidden>
+      <div class="likes-bar">
+        <input id="like-search" type="search" placeholder="Search liked songs" spellcheck="false" autocomplete="off" />
+        <button id="like-sync" class="icon-btn" title="Sync from YouTube Music">
+          <!-- lucide:refresh-cw -->
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+        </button>
+      </div>
+      <div id="like-info" class="likes-info"></div>
+      <div id="like-list"></div>
+    </div>
+    <div class="pane" id="pane-banned" hidden>
+      <div class="ban-actions">
+        <button id="ban-song" title="Ban the current song and skip it">Ban song</button>
+        <button id="ban-artist" title="Ban the current artist and skip">Ban artist</button>
+      </div>
+      <div class="chips" id="artist-chooser" hidden></div>
+      <div id="ban-list"></div>
+    </div>
+  </div>
+
+<script>
+  const invoke = (cmd, args) => window.__TAURI_INTERNALS__.invoke(cmd, args);
+  const $ = (id) => document.getElementById(id);
+  const thumb = (id) => id ? `https://i.ytimg.com/vi/${encodeURIComponent(id)}/default.jpg` : '';
+
+  function fmtDuration(secs) {
+    secs = Math.floor(secs || 0);
+    const d = Math.floor(secs / 86400), h = Math.floor(secs / 3600) % 24, m = Math.floor(secs / 60) % 60;
+    if (d) return `${d}d ${h}h`;
+    if (h) return `${h}h ${String(m).padStart(2, '0')}m`;
+    return `${m}m`;
+  }
+
+  function fmtWhen(unix) {
+    const t = new Date(unix * 1000);
+    const hm = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const days = Math.round((today - new Date(t).setHours(0, 0, 0, 0)) / 86400000);
+    if (days === 0) return hm;
+    if (days === 1) return `Yesterday ${hm}`;
+    if (days < 7) return `${t.toLocaleDateString([], { weekday: 'short' })} ${hm}`;
+    return t.toLocaleDateString([], { day: 'numeric', month: 'short' });
+  }
+
+  // "A, B & C" plus "(feat. D)" in the title -> ["A", "B", "C", "D"]  (same rule as inject.js)
+  function creditedArtists(artist, title) {
+    const names = (artist || '').split(/\s*(?:,|&|\bfeat\.?|\bft\.?)\s+/i);
+    const feat = /[([](?:feat\.?|ft\.?)\s+([^)\]]+)[)\]]/i.exec(title || '');
+    if (feat) names.push(...feat[1].split(/\s*(?:,|&)\s*/));
+    const seen = new Set();
+    return names.map((n) => n.trim()).filter((n) => n && !seen.has(n.toLowerCase()) && seen.add(n.toLowerCase()));
+  }
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function setImg(img, src) { if (img.getAttribute('src') !== src) img.src = src; }
+
+  let lastHistory = '';
+  function renderHistory(items) {
+    const key = JSON.stringify(items);
+    if (key === lastHistory) return; // avoid resetting scroll/hover every poll
+    lastHistory = key;
+    const box = $('history');
+    box.replaceChildren();
+    if (!items.length) {
+      const e = document.createElement('div');
+      e.className = 'empty';
+      e.textContent = 'Songs you listen to will show up here.';
+      box.append(e);
+      return;
+    }
+    for (const it of items) {
+      const row = document.createElement('div');
+      row.className = 'item';
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.src = thumb(it.video_id);
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const title = document.createElement('div');
+      title.className = 'ellipsis';
+      title.textContent = it.title;
+      const artist = document.createElement('div');
+      artist.className = 'artist ellipsis';
+      artist.textContent = it.artist;
+      meta.append(title, artist);
+      const when = document.createElement('time');
+      when.textContent = fmtWhen(it.started_at);
+      row.title = `${it.title} – ${it.artist}`;
+      row.append(img, meta, when);
+      box.append(row);
+    }
+  }
+
+  // ---------- ban list ----------
+  let bans = { songs: [], artists: [] };
+  let nowPlaying = null;
+  // lucide:x
+  const X_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+
+  function isBanned(now) {
+    if (!now?.video_id) return false;
+    if (bans.songs.some((b) => b.video_id === now.video_id)) return true;
+    const banned = new Set(bans.artists.map((a) => a.toLowerCase()));
+    return creditedArtists(now.artist, now.title).some((a) => banned.has(a.toLowerCase()));
+  }
+
+  function renderBans() {
+    const box = $('ban-list');
+    box.replaceChildren();
+    const unbanBtn = (title, onClick) => {
+      const b = el('button', 'unban');
+      b.title = title;
+      b.innerHTML = X_ICON;
+      b.onclick = onClick;
+      return b;
+    };
+    box.append(el('div', 'section', `Songs (${bans.songs.length})`));
+    if (!bans.songs.length) box.append(el('div', 'empty', 'No banned songs.'));
+    for (const b of bans.songs) {
+      const row = el('div', 'item');
+      const img = el('img');
+      img.loading = 'lazy';
+      img.src = thumb(b.video_id);
+      const meta = el('div', 'meta');
+      meta.append(el('div', 'ellipsis', b.title), el('div', 'artist ellipsis', b.artist));
+      row.append(img, meta, unbanBtn('Unban song', () => invoke('unban_song', { videoId: b.video_id })));
+      box.append(row);
+    }
+    box.append(el('div', 'section', `Artists (${bans.artists.length})`));
+    if (!bans.artists.length) box.append(el('div', 'empty', 'No banned artists.'));
+    for (const name of bans.artists) {
+      const row = el('div', 'item');
+      const meta = el('div', 'meta');
+      meta.append(el('div', 'ellipsis', name));
+      row.append(el('div', 'artist-icon', name.slice(0, 1).toUpperCase()), meta,
+                 unbanBtn('Unban artist', () => invoke('unban_artist', { name })));
+      box.append(row);
+    }
+  }
+
+  function renderBanButtons() {
+    const has = !!nowPlaying?.video_id;
+    $('ban-song').disabled = !has;
+    $('ban-artist').disabled = !has || !creditedArtists(nowPlaying.artist, nowPlaying.title).length;
+    $('now-banned').classList.toggle('on', isBanned(nowPlaying));
+  }
+
+  window.__ytmdSetBans = (b) => {
+    bans = b;
+    renderBans();
+    renderBanButtons();
+  };
+
+  $('ban-song').onclick = () => invoke('ban_current_song');
+  $('ban-artist').onclick = () => {
+    const chooser = $('artist-chooser');
+    const artists = creditedArtists(nowPlaying?.artist, nowPlaying?.title);
+    if (artists.length === 1) return invoke('ban_artist', { name: artists[0] });
+    // Several credited artists: pick which one.
+    if (!chooser.hidden) { chooser.hidden = true; return; }
+    chooser.replaceChildren(el('div', 'hint', 'Which artist?'));
+    for (const name of artists) {
+      const b = el('button', null, name);
+      b.onclick = () => { chooser.hidden = true; invoke('ban_artist', { name }); };
+      chooser.append(b);
+    }
+    chooser.hidden = false;
+  };
+
+  // ---------- liked songs ----------
+  const LIKE_PAGE = 100; // rows rendered at a time; more are added as you scroll
+  let likes = { songs: [], synced_at: null };
+  let likeMatches = [];
+  let likeShown = 0;
+  let likeSync = null; // latest status from a running sync
+
+  function fmtAgo(unix) {
+    const secs = Date.now() / 1000 - unix;
+    if (secs < 60) return 'just now';
+    if (secs < 3600) return `${Math.floor(secs / 60)} min ago`;
+    if (secs < 86400) return `${Math.floor(secs / 3600)} h ago`;
+    return `${Math.floor(secs / 86400)} d ago`;
+  }
+
+  function renderLikeInfo() {
+    const info = $('like-info');
+    const btn = $('like-sync');
+    const running = likeSync?.state === 'running';
+    btn.disabled = running;
+    btn.classList.toggle('spin', running);
+    info.classList.toggle('error', likeSync?.state === 'error');
+    const q = $('like-search').value.trim();
+    if (running) info.textContent = `Syncing… ${likeSync.count} songs`;
+    else if (likeSync?.state === 'error') info.textContent = `Sync failed: ${likeSync.message}`;
+    else if (!likes.synced_at && !likes.songs.length) info.textContent = 'Press ⟳ to load your liked songs from YouTube Music.';
+    else {
+      const n = likes.songs.length.toLocaleString();
+      const count = q ? `${likeMatches.length.toLocaleString()} of ${n} songs` : `${n} songs`;
+      info.textContent = likes.synced_at ? `${count} · synced ${fmtAgo(likes.synced_at)}` : count;
+    }
+  }
+
+  function likeRow(s) {
+    const row = el('div', 'item');
+    row.dataset.id = s.video_id;
+    row.classList.toggle('playing', s.video_id === nowPlaying?.video_id);
+    const img = el('img');
+    img.loading = 'lazy';
+    img.src = thumb(s.video_id);
+    const meta = el('div', 'meta');
+    meta.append(el('div', 'ellipsis', s.title), el('div', 'artist ellipsis', [s.artist, s.album].filter(Boolean).join(' • ')));
+    row.title = `Play ${s.title}`;
+    row.onclick = () => invoke('play_song', { videoId: s.video_id });
+    row.append(img, meta);
+    if (s.duration) row.append(el('time', null, `${Math.floor(s.duration / 60)}:${String(Math.floor(s.duration % 60)).padStart(2, '0')}`));
+    return row;
+  }
+
+  function showMoreLikes() {
+    const box = $('like-list');
+    const end = Math.min(likeShown + LIKE_PAGE, likeMatches.length);
+    for (; likeShown < end; likeShown++) box.append(likeRow(likeMatches[likeShown]));
+  }
+
+  // Every word must appear somewhere in title, artist or album.
+  function filterLikes() {
+    const words = $('like-search').value.toLowerCase().split(/\s+/).filter(Boolean);
+    likeMatches = words.length
+      ? likes.songs.filter((s) => {
+          const hay = `${s.title} ${s.artist} ${s.album}`.toLowerCase();
+          return words.every((w) => hay.includes(w));
+        })
+      : likes.songs;
+    $('like-list').replaceChildren();
+    likeShown = 0;
+    showMoreLikes();
+    if (!likeMatches.length && likes.songs.length) $('like-list').append(el('div', 'empty', 'No matches.'));
+    renderLikeInfo();
+  }
+
+  async function loadLikes() {
+    try { likes = await invoke('get_likes'); } catch (e) { console.warn(e); }
+    filterLikes();
+  }
+  window.__panelLikesChanged = loadLikes;
+  window.__panelLikesSync = (st) => {
+    likeSync = st;
+    renderLikeInfo();
+  };
+
+  $('like-search').addEventListener('input', filterLikes);
+  $('like-search').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && e.target.value) { e.target.value = ''; filterLikes(); e.stopPropagation(); }
+  });
+  $('like-sync').onclick = () => {
+    likeSync = { state: 'running', count: 0 };
+    renderLikeInfo();
+    invoke('sync_likes').catch((e) => window.__panelLikesSync({ state: 'error', message: String(e) }));
+  };
+  $('pane-liked').addEventListener('scroll', (e) => {
+    const p = e.target;
+    if (p.scrollTop + p.clientHeight > p.scrollHeight - 300) showMoreLikes();
+  });
+  setInterval(renderLikeInfo, 60000); // keeps "synced N min ago" fresh
+
+  // ---------- stats: show more ----------
+  function setStatsExpanded(on) {
+    $('stats').classList.toggle('expanded', on);
+    $('stats-more').classList.toggle('expanded', on);
+    $('stats-more').setAttribute('aria-expanded', on);
+    $('stats-more').firstElementChild.textContent = on ? 'Show less' : 'Show more';
+    try { localStorage.setItem('statsExpanded', on ? '1' : ''); } catch {}
+  }
+  $('stats-more').onclick = () => setStatsExpanded(!$('stats').classList.contains('expanded'));
+  let statsExpanded = false;
+  try { statsExpanded = !!localStorage.getItem('statsExpanded'); } catch {}
+  setStatsExpanded(statsExpanded);
+
+  // ---------- equalizer (the audio side is in inject.js) ----------
+  const EQ_FREQS = ['32', '64', '125', '250', '500', '1k', '2k', '4k', '8k', '16k'];
+  const EQ_MAX = 12;
+  const EQ_PRESETS = {
+    flat: ['Flat', [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+    bass: ['Bass boost', [6, 5, 4, 2, 0, 0, 0, 0, 0, 0]],
+    treble: ['Treble boost', [0, 0, 0, 0, 0, 0, 1, 3, 5, 6]],
+    loud: ['Loudness', [5, 4, 2, 0, -1, -1, 0, 2, 4, 5]],
+    vocal: ['Vocal', [-2, -2, -1, 0, 2, 3, 3, 2, 0, -1]],
+    rock: ['Rock', [4, 3, 1, -1, -2, -1, 1, 3, 4, 4]],
+    electronic: ['Electronic', [5, 4, 1, 0, -2, 1, 0, 1, 4, 5]],
+  };
+  let eqState = { enabled: false, preset: 'flat', gains: EQ_FREQS.map(() => 0) };
+  const eqInputs = [];
+
+  const sendEq = (save) => invoke('set_eq', { eq: eqState, save }).catch(console.warn);
+  const fmtDb = (g) => (g > 0 ? '+' : '') + (Number.isInteger(g) ? g : g.toFixed(1));
+  const pct = (g) => ((g + EQ_MAX) / (2 * EQ_MAX)) * 100;
+
+  function paintBand(i) {
+    const input = eqInputs[i];
+    const g = eqState.gains[i];
+    input.value = g;
+    // The track is filled from 0 dB to the value.
+    input.style.setProperty('--lo', `${Math.min(50, pct(g))}%`);
+    input.style.setProperty('--hi', `${Math.max(50, pct(g))}%`);
+    input.title = `${EQ_FREQS[i]} Hz: ${fmtDb(g)} dB (double-click to reset)`;
+  }
+
+  function renderEq() {
+    const sel = $('eq-preset');
+    $('eq').classList.toggle('off', !eqState.enabled);
+    $('eq-on').setAttribute('aria-checked', eqState.enabled);
+    sel.value = EQ_PRESETS[eqState.preset] ? eqState.preset : 'custom';
+    sel.querySelector('[value=custom]').hidden = sel.value !== 'custom';
+    eqInputs.forEach((_, i) => paintBand(i));
+    // Compact view
+    const name = EQ_PRESETS[eqState.preset]?.[0] || 'Custom';
+    $('eq-summary').textContent = eqState.enabled ? name : 'Off';
+    $('eq-mini').title = eqState.enabled ? name : 'Off';
+    // Scaled to the biggest band (at least 6 dB) so gentle curves still show their shape.
+    const scale = Math.max(6, ...eqState.gains.map(Math.abs));
+    [...$('eq-mini').children].forEach((bar, i) => {
+      const y = 50 - (eqState.gains[i] / scale) * 50; // % from the top
+      bar.style.setProperty('--top', `${Math.min(50, y)}%`);
+      bar.style.setProperty('--bottom', `${100 - Math.max(50, y)}%`);
+    });
+  }
+
+  function setEqExpanded(on) {
+    $('eq').classList.toggle('expanded', on);
+    $('eq-expand').setAttribute('aria-expanded', on);
+    $('eq-expand').title = on ? 'Hide equalizer' : 'Show equalizer';
+    try { localStorage.setItem('eqExpanded', on ? '1' : ''); } catch {}
+  }
+
+  // Moving a slider or picking a preset turns the EQ on.
+  function editEq(change, save) {
+    Object.assign(eqState, change, { enabled: true });
+    renderEq();
+    sendEq(save);
+  }
+
+  function buildEq() {
+    const sel = $('eq-preset');
+    EQ_FREQS.forEach(() => $('eq-mini').append(el('i')));
+    // Collapsed, the whole header opens it; expanded, only the chevron closes it.
+    $('eq-expand').onclick = (e) => {
+      e.stopPropagation();
+      setEqExpanded(!$('eq').classList.contains('expanded'));
+    };
+    document.querySelector('.eq-head').onclick = () => {
+      if (!$('eq').classList.contains('expanded')) setEqExpanded(true);
+    };
+    let eqExpanded = false;
+    try { eqExpanded = !!localStorage.getItem('eqExpanded'); } catch {}
+    setEqExpanded(eqExpanded);
+    for (const [key, [name]] of Object.entries(EQ_PRESETS)) sel.append(new Option(name, key));
+    sel.append(new Option('Custom', 'custom'));
+    sel.onchange = () => {
+      if (EQ_PRESETS[sel.value]) editEq({ preset: sel.value, gains: [...EQ_PRESETS[sel.value][1]] }, true);
+    };
+    $('eq-on').onclick = () => {
+      eqState.enabled = !eqState.enabled;
+      renderEq();
+      sendEq(true);
+    };
+
+    EQ_FREQS.forEach((f, i) => {
+      const band = el('div', 'band');
+      const slot = el('div', 'slot');
+      const input = el('input');
+      Object.assign(input, { type: 'range', min: -EQ_MAX, max: EQ_MAX, step: 0.5 });
+      input.setAttribute('aria-label', `${f} Hz`);
+      const label = el('span', null, f);
+      // While hovered or focused, the label shows the band's gain instead of its frequency.
+      const show = (on) => {
+        band.classList.toggle('active', on);
+        label.textContent = on ? fmtDb(eqState.gains[i]) : f;
+      };
+      const set = (g, save) => {
+        const gains = [...eqState.gains];
+        gains[i] = Math.max(-EQ_MAX, Math.min(EQ_MAX, g));
+        editEq({ preset: 'custom', gains }, save);
+        if (band.classList.contains('active')) label.textContent = fmtDb(gains[i]);
+      };
+      input.oninput = () => set(Number(input.value), false);
+      input.onchange = () => set(Number(input.value), true);
+      input.ondblclick = () => set(0, true);
+      input.onwheel = (e) => {
+        e.preventDefault();
+        set(eqState.gains[i] + (e.deltaY < 0 ? 0.5 : -0.5), true);
+      };
+      band.onpointerenter = () => show(true);
+      band.onpointerleave = () => { if (document.activeElement !== input) show(false); };
+      input.onfocus = () => show(true);
+      input.onblur = () => show(false);
+      slot.append(input);
+      band.append(slot, label);
+      $('eq-bands').append(band);
+      eqInputs.push(input);
+    });
+    renderEq();
+  }
+  buildEq();
+  invoke('get_eq').then((e) => { eqState = e; renderEq(); }).catch(console.warn);
+
+  // ---------- tabs ----------
+  function showTab(name) {
+    for (const b of document.querySelectorAll('.tabs button')) b.classList.toggle('active', b.dataset.tab === name);
+    for (const pane of document.querySelectorAll('.pane')) pane.hidden = pane.id !== `pane-${name}`;
+    try { localStorage.setItem('tab', name); } catch {}
+  }
+  for (const b of document.querySelectorAll('.tabs button')) b.onclick = () => showTab(b.dataset.tab);
+  let savedTab = 'recent';
+  try { savedTab = localStorage.getItem('tab') || 'recent'; } catch {}
+  showTab(document.getElementById(`pane-${savedTab}`) ? savedTab : 'recent');
+
+  function render(s) {
+    const now = s.now;
+    if (nowPlaying?.video_id !== now.video_id) $('artist-chooser').hidden = true;
+    if (nowPlaying?.video_id !== now.video_id) {
+      for (const row of $('like-list').children) row.classList?.toggle('playing', row.dataset.id === now.video_id);
+    }
+    nowPlaying = now;
+    renderBanButtons();
+    if (now.video_id) {
+      setImg($('now-thumb'), thumb(now.video_id));
+      $('now-title').textContent = now.title || '—';
+      $('now-artist').textContent = [now.artist, now.album].filter(Boolean).join(' • ');
+      $('now-count').innerHTML = '';
+      const b = document.createElement('b');
+      b.textContent = s.now_play_count;
+      $('now-count').append('Played ', b, s.now_play_count === 1 ? ' time' : ' times');
+    }
+    $('today-plays').textContent = s.today_plays;
+    $('today-time').textContent = fmtDuration(s.today_secs);
+    $('total-plays').textContent = s.total_plays;
+    $('total-time').textContent = fmtDuration(s.total_secs);
+    $('ram').textContent = `${s.ram_mb} MB`;
+    ramHistory = s.ram_history;
+    drawRam();
+    $('uptime').textContent = fmtDuration(s.uptime_secs);
+    renderHistory(s.history);
+  }
+
+  // ---------- RAM graph: scrolls left continuously, auto-scaled so small changes show ----------
+  const GRAPH_WINDOW_MS = 5 * 60 * 1000;
+  let ramHistory = [];
+  function drawRam() {
+    const c = $('ram-graph');
+    const dpr = window.devicePixelRatio || 1;
+    const w = c.clientWidth, h = c.clientHeight;
+    if (c.width !== Math.round(w * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+    const g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+
+    // baseline
+    g.strokeStyle = '#262626';
+    g.lineWidth = 1;
+    g.beginPath(); g.moveTo(0, h - 0.5); g.lineTo(w, h - 0.5); g.stroke();
+
+    const now = Date.now();
+    const pts = ramHistory.filter(([t]) => now - t <= GRAPH_WINDOW_MS + 5000);
+    if (pts.length < 2) return;
+    let lo = Math.min(...pts.map((p) => p[1])), hi = Math.max(...pts.map((p) => p[1]));
+    const pad = Math.max(20, (hi - lo) * 0.25); // keep a flat line from looking like noise
+    lo -= pad; hi += pad;
+    const x = (t) => w - ((now - t) / GRAPH_WINDOW_MS) * w;
+    const y = (mb) => 4 + (1 - (mb - lo) / (hi - lo)) * (h - 8);
+
+    g.beginPath();
+    pts.forEach(([t, mb], i) => (i ? g.lineTo(x(t), y(mb)) : g.moveTo(x(t), y(mb))));
+    const last = pts[pts.length - 1];
+    g.lineTo(w, y(last[1])); // extend to "now" so the line meets the right edge
+    g.lineJoin = 'round';
+    g.lineWidth = 1.5;
+    g.strokeStyle = '#ff4d6d';
+    g.stroke();
+
+    // soft fill under the line
+    g.lineTo(w, h); g.lineTo(x(pts[0][0]), h); g.closePath();
+    const grad = g.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, 'rgba(255, 77, 109, .28)');
+    grad.addColorStop(1, 'rgba(255, 77, 109, 0)');
+    g.fillStyle = grad;
+    g.fill();
+  }
+  // Redraw every second so the graph keeps sliding between samples.
+  setInterval(() => { if (open && document.visibilityState === 'visible') drawRam(); }, 1000);
+
+  // Poll only while the panel is open and the window is visible.
+  let open = true;
+  let timer = null;
+  async function tick() {
+    try { render(await invoke('get_stats')); } catch (e) { console.warn(e); }
+  }
+  function schedule() {
+    clearInterval(timer);
+    timer = null;
+    if (open && document.visibilityState === 'visible') {
+      tick();
+      timer = setInterval(tick, 2000);
+    }
+  }
+  window.__panelSetOpen = (v) => {
+    open = v;
+    schedule();
+  };
+  document.addEventListener('visibilitychange', schedule);
+
+  $('collapse').addEventListener('click', () => invoke('toggle_panel'));
+
+  // Same in-app shortcut as the YouTube Music side, for when the panel has focus.
+  let panelKey = '';
+  window.__ytmdSetPanelKey = (k) => { panelKey = k; };
+  const accelerator = (e) => {
+    if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return '';
+    const mods = [e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Super'].filter(Boolean);
+    const key = e.code.replace(/^Key([A-Z])$/, '$1').replace(/^Digit(\d)$/, '$1');
+    return [...mods, key].join('+');
+  };
+  document.addEventListener('keydown', (e) => {
+    if (panelKey && accelerator(e).toLowerCase() === panelKey.toLowerCase()) {
+      e.preventDefault();
+      invoke('toggle_panel');
+    }
+  });
+
+  invoke('get_bans').then(window.__ytmdSetBans).catch(console.warn);
+  loadLikes();
+  renderBanButtons();
+
+  invoke('get_panel_ui').then((ui) => {
+    panelKey = ui.key;
+    window.__panelSetOpen(ui.open);
+  });
+</script>
+</body>
+</html>

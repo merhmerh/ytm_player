@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-unban-artist"
+description = "Enables the unban_artist command without any pre-configured scope."
+commands.allow = ["unban_artist"]
+
+[[permission]]
+identifier = "deny-unban-artist"
+description = "Denies the unban_artist command without any pre-configured scope."
+commands.deny = ["unban_artist"]

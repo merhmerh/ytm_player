@@ -1,0 +1,27 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "youtube-music",
+  "description": "Lets the injected script on music.youtube.com call a few of the app's own commands (no plugin/OS access).",
+  "webviews": [
+    "ytm"
+  ],
+  "remote": {
+    "urls": [
+      "https://music.youtube.com/*"
+    ]
+  },
+  "permissions": [
+    "allow-report-state",
+    "allow-get-restore",
+    "allow-get-panel-ui",
+    "allow-toggle-panel",
+    "allow-get-bans",
+    "allow-likes-sync-status",
+    "allow-save-likes",
+    "allow-like-song",
+    "allow-unlike-song",
+    "allow-dislike-song",
+    "allow-unban-song",
+    "allow-get-eq"
+  ]
+}
