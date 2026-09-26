@@ -18,7 +18,7 @@ few things the website doesn't have.
 - **Memory watchdog**: reloads the page when memory gets high, waiting for the next track
   if music is playing.
 
-Your stats, likes, bans and settings stay on your computer, in `%APPDATA%\com.arvin.ytmplayer`.
+Your stats, likes, bans and settings stay on your computer, in `%APPDATA%\com.merhmerh.ytmplayer`.
 
 ## Building it yourself
 
